@@ -1,0 +1,67 @@
+/* src/styles/styles.css */
+
+.app-root {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #041025, #071726);
+  color: #e8f7ff;
+}
+
+.logo {
+  font-weight: 800;
+  background: linear-gradient(90deg, #ff6b6b, #ffd24d, #7afcff);
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.status-chip {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 6px 10px;
+  border-radius: 10px;
+}
+
+.stage {
+  height: 62vh;
+  border-radius: 14px;
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.balloon-wrap {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+
+.balloon-btn {
+  border: none;
+  border-radius: 100px;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+}
+
+.balloon-svg {
+  width: 88%;
+  height: 88%;
+}
+
+.lb-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lb-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+}
+
+.lb-row.me {
+  background: rgba(124, 58, 237, 0.08);
+}
+
+.lb-score {
+  font-weight: bold;
+}

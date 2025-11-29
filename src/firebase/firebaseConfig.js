@@ -1,6 +1,5 @@
-// Firebase initialization and auth helpers
-// Fill the values in your .env file (see .env.sample below) or set env vars in your hosting platform
 import { initializeApp, getApps } from 'firebase/app';
+
 import {
 	getAuth,
 	GoogleAuthProvider,
@@ -10,24 +9,54 @@ import {
 	RecaptchaVerifier,
 	signInWithPhoneNumber,
 } from 'firebase/auth';
-import { getFirestore, collection, doc, setDoc, addDoc, getDocs, getDoc, query, orderBy, limit, serverTimestamp } from 'firebase/firestore';
-import { getDatabase, ref as rdbRef, push as rdbPush, set as rdbSet, get as rdbGet, query as rdbQuery, orderByChild, limitToLast, onValue } from 'firebase/database';
+
+import {
+	getFirestore,
+	collection,
+	doc,
+	setDoc,
+	addDoc,
+	getDocs,
+	getDoc,
+	query,
+	orderBy,
+	limit,
+	serverTimestamp,
+} from 'firebase/firestore';
+
+import {
+	getDatabase,
+	ref as rdbRef,
+	push as rdbPush,
+	set as rdbSet,
+	get as rdbGet,
+	query as rdbQuery,
+	orderByChild,
+	limitToLast,
+	onValue,
+} from 'firebase/database';
 
 
+// ------------------------------------------------------
+//  CONFIG
+// ------------------------------------------------------
 const firebaseConfig = {
-  apiKey: "AIzaSyAzg-8-rcGURaVLZ9OIO35ge2mgtxJTTkw",
-  authDomain: "hackathon-project-97f0d.firebaseapp.com",
-  databaseURL: "https://hackathon-project-97f0d-default-rtdb.firebaseio.com",
-  projectId: "hackathon-project-97f0d",
-  storageBucket: "hackathon-project-97f0d.firebasestorage.app",
-  messagingSenderId: "567081945630",
-  appId: "1:567081945630:web:ebdc5b0ded5de70b273c0f",
-  measurementId: "G-LX1FPVQCK7"
+	apiKey: "AIzaSyAzg-8-rcGURaVLZ9OIO35ge2mgtxJTTkw",
+	authDomain: "hackathon-project-97f0d.firebaseapp.com",
+	databaseURL: "https://hackathon-project-97f0d-default-rtdb.firebaseio.com",
+	projectId: "hackathon-project-97f0d",
+	storageBucket: "hackathon-project-97f0d.firebasestorage.app",
+	messagingSenderId: "567081945630",
+	appId: "1:567081945630:web:ebdc5b0ded5de70b273c0f",
+	measurementId: "G-LX1FPVQCK7"
 };
 
-// Initialize app only once
+
+// ------------------------------------------------------
+//  INIT APP ONCE
+// ------------------------------------------------------
 let app;
-if (!getApps() || getApps().length === 0) {
+if (!getApps().length) {
 	app = initializeApp(firebaseConfig);
 } else {
 	app = getApps()[0];
@@ -35,24 +64,36 @@ if (!getApps() || getApps().length === 0) {
 
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
-
-// Firestore
 const db = getFirestore(app);
+const rdb = getDatabase(app);
 
+
+// ------------------------------------------------------
+//  SAVE LEVEL RESULT (FIRESTORE + REALTIME DB)
+// ------------------------------------------------------
 /*
-  Save level result under users/{uid}/levels and also add/aggregate to leaderboard
- * levelData: { level, score, attempts, reactionTimes, areas, createdAt }
- */
+levelData = {
+  level,
+  score,
+  attempts,
+  reactionTimes,
+  areas,
+  playerName,
+  playerEmail
+}
+*/
 async function saveLevelResult(userId, levelData) {
-	if (!userId) throw new Error('No user id');
+	if (!userId) throw new Error("User ID missing");
+
 	const userLevelsRef = collection(db, `users/${userId}/levels`);
 	const payload = { ...levelData, createdAt: serverTimestamp() };
+
+	// Save under user's levels
 	const docRef = await addDoc(userLevelsRef, payload);
 
-	// also write to leaderboard collection for simple global ranking
+	// Save to leaderboard
 	try {
-		const leaderboardRef = collection(db, 'leaderboard');
-		// include optional player name/email for richer leaderboard entries
+		const leaderboardRef = collection(db, "leaderboard");
 		await addDoc(leaderboardRef, {
 			userId,
 			name: levelData.playerName || null,
@@ -61,158 +102,181 @@ async function saveLevelResult(userId, levelData) {
 			score: levelData.score,
 			createdAt: serverTimestamp(),
 		});
-	} catch (e) {
-		console.warn('Leaderboard write failed', e.message);
+	} catch (err) {
+		console.warn("Firestore leaderboard write failed:", err.message);
 	}
+
+	// Save to realtime leaderboard also
 	try {
-		await saveLeaderboardRealtime({ userId, name: levelData.playerName || null, level: levelData.level, score: levelData.score });
-	} catch (e) {
-		// ignore
+		await saveLeaderboardRealtime({
+			userId,
+			name: levelData.playerName || null,
+			level: levelData.level,
+			score: levelData.score,
+		});
+	} catch (err) {
+		console.warn("RTDB leaderboard write failed:", err.message);
 	}
 
 	return docRef.id;
 }
 
-const rdb = getDatabase(app);
 
+// ------------------------------------------------------
+//  REALTIME DATABASE LEADERBOARD
+// ------------------------------------------------------
 async function saveLeaderboardRealtime(entry) {
 	try {
-		const leaderRef = rdbRef(rdb, 'leaderboard');
-		const newRef = rdbPush(leaderRef);
+		const leaderRef = rdbRef(rdb, "leaderboard");
+		const newEntry = rdbPush(leaderRef);
 		const payload = { ...entry, ts: Date.now() };
-		await rdbSet(newRef, payload);
-		try { console.log('RTDB write succeeded', newRef.key, payload); } catch(e){}
-		return newRef.key;
-	} catch (e) {
-		console.warn('RTDB write failed', e.message);
+		await rdbSet(newEntry, payload);
+		return newEntry.key;
+	} catch (err) {
+		console.warn("RTDB write failed:", err.message);
 		return null;
-	}
-}
-
-/* Save or update a user's profile document in Firestore under `users/{uid}`.
- * profile can contain displayName, email, photoURL or other metadata.
- */
-async function saveUserProfile(uid, profile = {}) {
-	if (!uid) throw new Error('No uid');
-	try {
-		const userDoc = doc(db, 'users', uid);
-		// merge profile fields and set updatedAt
-		await setDoc(userDoc, { ...profile, updatedAt: serverTimestamp() }, { merge: true });
-		return true;
-	} catch (e) {
-		console.warn('saveUserProfile failed', e?.message || e);
-		return false;
 	}
 }
 
 async function getRealtimeLeaderboard(limitNumber = 10) {
 	try {
-		const q = rdbQuery(rdbRef(rdb, 'leaderboard'), orderByChild('score'), limitToLast(limitNumber));
+		const q = rdbQuery(
+			rdbRef(rdb, "leaderboard"),
+			orderByChild("score"),
+			limitToLast(limitNumber)
+		);
 		const snap = await rdbGet(q);
-		const out = [];
-		if (!snap.exists()) return out;
+
+		if (!snap.exists()) return [];
+
+		const result = [];
 		snap.forEach((child) => {
-			out.push({ id: child.key, ...child.val() });
+			result.push({ id: child.key, ...child.val() });
 		});
-		// sort descending by score
-		out.sort((a, b) => (b.score || 0) - (a.score || 0));
-		try { console.log('RTDB fetched', out.length, 'leaderboard entries'); } catch(e){}
-		return out;
-	} catch (e) {
-		console.warn('RTDB read failed', e.message);
+
+		result.sort((a, b) => (b.score || 0) - (a.score || 0));
+		return result;
+	} catch (err) {
+		console.warn("RTDB read failed:", err.message);
 		return [];
 	}
 }
 
-// Read aggregated top-N leaderboard doc written by Cloud Function
+function subscribeRealtimeLeaderboard(onUpdate, limitNumber = 10) {
+	const q = rdbQuery(
+		rdbRef(rdb, "leaderboard"),
+		orderByChild("score"),
+		limitToLast(limitNumber)
+	);
+
+	return onValue(q, (snapshot) => {
+		const arr = [];
+		if (snapshot.exists()) {
+			snapshot.forEach((child) => {
+				arr.push({ id: child.key, ...child.val() });
+			});
+		}
+		arr.sort((a, b) => (b.score || 0) - (a.score || 0));
+		onUpdate(arr);
+	});
+}
+
+
+// ------------------------------------------------------
+//  FIRESTORE LEADERBOARD
+// ------------------------------------------------------
+async function getLeaderboard(limitNumber = 10) {
+	const q = query(
+		collection(db, "leaderboard"),
+		orderBy("score", "desc"),
+		limit(limitNumber)
+	);
+
+	const snap = await getDocs(q);
+	return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+
+// Cloud function aggregated leaderboard
 async function getTopLeaderboard() {
 	try {
-		const metaDoc = await getDoc(doc(db, 'meta', 'leaderboard_top'));
-		if (!metaDoc.exists()) return [];
-		const data = metaDoc.data();
-		return data.top || [];
-	} catch (e) {
-		console.warn('getTopLeaderboard failed', e?.message || e);
+		const docSnap = await getDoc(doc(db, "meta", "leaderboard_top"));
+		if (!docSnap.exists()) return [];
+		return docSnap.data().top || [];
+	} catch (err) {
+		console.warn("Top leaderboard read failed:", err.message);
 		return [];
 	}
 }
 
-// Fetch multiple user profiles by uid and return a map { uid: profile }
-async function getUsersByIds(uids = []) {
-	try {
-		const pairs = await Promise.all(uids.map(async (uid) => {
-			try {
-				const d = await getDoc(doc(db, 'users', uid));
-				return [uid, d.exists() ? d.data() : null];
-			} catch (e) {
-				return [uid, null];
-			}
-		}));
-		const out = {};
-		pairs.forEach(([uid, profile]) => { out[uid] = profile; });
-		return out;
-	} catch (e) {
-		console.warn('getUsersByIds failed', e?.message || e);
-		return {};
-	}
-}
 
-/*
- * Subscribe to realtime leaderboard changes. Calls `onUpdate` with an array of entries
- * whenever the leaderboard data changes. Returns an unsubscribe function.
- */
-function subscribeRealtimeLeaderboard(onUpdate, limitNumber = 10) {
+// ------------------------------------------------------
+//  USER PROFILE HELPERS
+// ------------------------------------------------------
+async function saveUserProfile(uid, profile = {}) {
+	if (!uid) return false;
+
 	try {
-		const q = rdbQuery(rdbRef(rdb, 'leaderboard'), orderByChild('score'), limitToLast(limitNumber));
-		const handler = (snapshot) => {
-			const out = [];
-			if (!snapshot.exists()) {
-				onUpdate(out);
-				return;
-			}
-			snapshot.forEach((child) => {
-				out.push({ id: child.key, ...child.val() });
-			});
-			out.sort((a, b) => (b.score || 0) - (a.score || 0));
-			onUpdate(out);
-		};
-		const unsubscribe = onValue(q, handler);
-		return unsubscribe;
-	} catch (e) {
-		console.warn('subscribeRealtimeLeaderboard failed', e.message || e);
-		return () => {};
+		const userDoc = doc(db, "users", uid);
+		await setDoc(
+			userDoc,
+			{ ...profile, updatedAt: serverTimestamp() },
+			{ merge: true }
+		);
+		return true;
+	} catch (err) {
+		console.warn("saveUserProfile failed:", err.message);
+		return false;
 	}
 }
 
 async function getUserLastLevel(userId) {
 	if (!userId) return null;
-	const userLevelsRef = collection(db, `users/${userId}/levels`);
-	const q = query(userLevelsRef, orderBy('createdAt', 'desc'), limit(1));
+
+	const q = query(
+		collection(db, `users/${userId}/levels`),
+		orderBy("createdAt", "desc"),
+		limit(1)
+	);
+
 	const snap = await getDocs(q);
 	if (snap.empty) return null;
-	const d = snap.docs[0];
-	return { id: d.id, ...d.data() };
+
+	return { id: snap.docs[0].id, ...snap.docs[0].data() };
 }
 
-// fetch the last N levels for a user (default 5)
 async function getUserLevels(userId, limitNumber = 5) {
 	if (!userId) return [];
-	const userLevelsRef = collection(db, `users/${userId}/levels`);
-	const q = query(userLevelsRef, orderBy('createdAt', 'desc'), limit(limitNumber));
-	const snap = await getDocs(q);
-	if (snap.empty) return [];
-	return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-}
 
-async function getLeaderboard(limitNumber = 10) {
-	const leaderboardRef = collection(db, 'leaderboard');
-	const q = query(leaderboardRef, orderBy('score', 'desc'), limit(limitNumber));
+	const q = query(
+		collection(db, `users/${userId}/levels`),
+		orderBy("createdAt", "desc"),
+		limit(limitNumber)
+	);
+
 	const snap = await getDocs(q);
 	return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
-// export RTDB helpers too
+async function getUsersByIds(uids = []) {
+	const results = {};
+	await Promise.all(
+		uids.map(async (uid) => {
+			try {
+				const d = await getDoc(doc(db, "users", uid));
+				results[uid] = d.exists() ? d.data() : null;
+			} catch {
+				results[uid] = null;
+			}
+		})
+	);
+	return results;
+}
 
+
+// ------------------------------------------------------
+//  AUTH METHODS
+// ------------------------------------------------------
 async function signInWithGoogle() {
 	return signInWithPopup(auth, googleProvider);
 }
@@ -225,15 +289,18 @@ async function signInWithEmail(email, password) {
 	return signInWithEmailAndPassword(auth, email, password);
 }
 
-function createRecaptcha(containerId = 'recaptcha-container', size = 'invisible') {
+function createRecaptcha(containerId = "recaptcha-container", size = "invisible") {
 	return new RecaptchaVerifier(containerId, { size }, auth);
 }
 
 async function sendPhoneVerification(phoneNumber, appVerifier) {
-	// returns confirmationResult
 	return signInWithPhoneNumber(auth, phoneNumber, appVerifier);
 }
 
+
+// ------------------------------------------------------
+//  EXPORTS
+// ------------------------------------------------------
 export {
 	app,
 	auth,
@@ -243,6 +310,7 @@ export {
 	signInWithEmail,
 	createRecaptcha,
 	sendPhoneVerification,
+
 	db,
 	saveLevelResult,
 	getUserLastLevel,
@@ -255,5 +323,3 @@ export {
 	getTopLeaderboard,
 	getUsersByIds,
 };
-
-
