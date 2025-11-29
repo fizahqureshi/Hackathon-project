@@ -1,0 +1,106 @@
+:root {
+  --home-bg: linear-gradient(140deg, #7f57ff 0%, #111011 45%, #ff77cd 100%);
+  --glass-bg: rgba(255, 255, 255, 0.08);
+  --accent: #fff;
+  --card-border: rgba(255, 255, 255, 0.15);
+}
+
+.home-root {
+  min-height: calc(100vh - 72px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 26px;
+  background: var(--home-bg);
+  color: var(--accent);
+}
+
+.home-content {
+  max-width: 980px;
+  text-align: center;
+  padding: 32px;
+  border-radius: 18px;
+  backdrop-filter: blur(10px);
+  background: var(--glass-bg);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25),
+              inset 0 0 20px rgba(255, 255, 255, 0.05);
+}
+
+.home-title {
+  font-size: clamp(2.6rem, 6vw, 4.5rem);
+  margin: 0 0 10px;
+  font-weight: 900;
+  text-shadow: 0 4px 20px rgba(255, 255, 255, 0.35);
+}
+
+.home-sub {
+  font-size: 1.15rem;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.home-row {
+  margin-top: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  justify-content: center;
+}
+
+.home-card {
+  width: 230px;
+  padding: 20px;
+  border-radius: 14px;
+  background: var(--glass-bg);
+  border: 1px solid var(--card-border);
+  text-align: center;
+  transition: 0.25s ease;
+  cursor: pointer;
+}
+
+.home-icon {
+  margin-bottom: 10px;
+  color: #ffd86b;
+  filter: drop-shadow(0 0 6px rgba(255, 210, 90, 0.5));
+}
+
+.home-card h3 {
+  margin: 6px 0;
+  font-weight: 700;
+}
+
+.home-card p {
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.home-rules {
+  margin-top: 26px;
+  text-align: left;
+  background: rgba(0, 0, 0, 0.15);
+  padding: 18px;
+  border-radius: 12px;
+}
+
+.home-rules h4 {
+  margin: 0 0 8px;
+  font-weight: 700;
+}
+
+.play-btn {
+  background: #ff5d8f !important;
+  padding: 10px 36px !important;
+  font-size: 1.2rem !important;
+  font-weight: 700 !important;
+  border-radius: 40px !important;
+  box-shadow: 0 8px 20px rgba(255, 93, 143, 0.4) !important;
+}
+
+.play-btn:hover {
+  background: #ff437c !important;
+}
+
+@media (max-width: 720px) {
+  .home-card {
+    width: 100%;
+  }
+}

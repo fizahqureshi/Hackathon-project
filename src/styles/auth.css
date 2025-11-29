@@ -1,0 +1,110 @@
+:root{
+  --bg-grad: linear-gradient(135deg,#ff8a00 0%,#e52e71 50%,#7b2ff7 100%);
+  --card-grad: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+  --glass: rgba(255,255,255,0.06);
+  --accent: #fff;
+}
+
+.auth-page{
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:2rem;
+  background: var(--bg-grad);
+  background-attachment: fixed;
+}
+
+.auth-card{
+  width:100%;
+  max-width:420px;
+  background: var(--card-grad);
+  border-radius:16px;
+  padding:28px;
+  box-shadow:0 8px 30px rgba(0,0,0,0.25);
+  color:var(--accent);
+  backdrop-filter: blur(8px) saturate(120%);
+}
+
+.brand{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  margin-bottom:12px;
+}
+
+.brand h2{margin:0;font-size:1.25rem}
+
+.input-group{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  margin-bottom:12px;
+}
+
+.input{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  background: transparent;
+  border:1px solid rgba(255,255,255,0.12);
+  padding:10px 12px;
+  border-radius:10px;
+  color:var(--accent);
+}
+
+.input input{
+  background:transparent;
+  border:0;
+  outline:none;
+  color:var(--accent);
+  flex:1;
+}
+
+.btn{
+  width:100%;
+  padding:10px 12px;
+  border-radius:10px;
+  border:0;
+  cursor:pointer;
+  font-weight:600;
+  color:#fff;
+  background: linear-gradient(90deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06));
+  transition:transform .18s ease, box-shadow .18s ease;
+}
+
+.btn:hover{transform:translateY(-3px); box-shadow:0 10px 30px rgba(0,0,0,0.25)}
+
+.social-row{
+  display:flex;
+  gap:8px;
+  margin:12px 0;
+}
+
+.social{
+  flex:1;
+  display:inline-flex;
+  gap:8px;
+  align-items:center;
+  justify-content:center;
+  padding:8px 10px;
+  border-radius:10px;
+  background: rgba(255,255,255,0.06);
+  cursor:pointer;
+  color:var(--accent);
+}
+
+.small-link{
+  margin-top:10px;
+  text-align:center;
+}
+
+.small-link a{color:rgba(255,255,255,0.9); text-decoration:underline}
+
+@media (max-width:480px){
+  .auth-card{padding:20px; border-radius:12px}
+}
+
+.helper{font-size:0.9rem; color:rgba(255,255,255,0.8)}
+
+#recaptcha-container{margin-top:8px}
