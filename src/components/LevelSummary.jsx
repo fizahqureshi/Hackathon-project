@@ -7,7 +7,6 @@ export default function LevelSummary() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // simple confetti on mount
     const root = document.getElementById('level-summary-root');
     if (!root) return;
     for (let i = 0; i < 30; i++) {

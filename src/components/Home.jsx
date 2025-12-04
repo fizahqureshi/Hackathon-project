@@ -49,7 +49,6 @@ export default function Home() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.7, ease: 'easeOut' }}
       >
-        {/* Title */}
         <motion.h1
           className="home-title"
           initial={{ scale: 0.7, opacity: 0 }}
@@ -58,8 +57,6 @@ export default function Home() {
         >
           Pop Master 🎈
         </motion.h1>
-
-        {/* Subtitle */}
         <motion.p
           className="home-sub"
           initial={{ opacity: 0, y: 12 }}
@@ -69,8 +66,6 @@ export default function Home() {
           The ultimate fast-paced, colorful balloon popping challenge.  
           Beat levels, react fast, and climb the leaderboard!
         </motion.p>
-
-        {/* Feature Cards */}
         <div className="home-row">
           {[
             {
@@ -106,8 +101,6 @@ export default function Home() {
             </motion.div>
           ))}
         </div>
-
-        {/* Rules */}
         <motion.div
           className="home-rules"
           initial={{ opacity: 0 }}
@@ -122,8 +115,6 @@ export default function Home() {
             <li>Your score & level get saved to Firestore automatically.</li>
           </ol>
         </motion.div>
-
-        {/* Play Button */}
         <motion.div
           style={{ marginTop: 26 }}
           initial={{ scale: 0.9, opacity: 0 }}
@@ -143,8 +134,6 @@ export default function Home() {
           </motion.div>
         </motion.div>
       </motion.div>
-
-      {/* Name Dialog */}
       <Dialog open={open} onClose={() => setOpen(false)}>
         <DialogTitle>Enter your player name</DialogTitle>
         <DialogContent>
@@ -171,7 +160,6 @@ export default function Home() {
       </Dialog>
     </div>
 
-      {/* Chatbot assistant (rule-based, no external API) */}
       <Chatbot />
     </>
   );

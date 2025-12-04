@@ -17,9 +17,8 @@ export function UserProvider({ children }) {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
-      // persist basic profile info to Firestore for richer leaderboard/user data
       if (u && u.uid) {
-        try { saveUserProfile(u.uid, { displayName: u.displayName || null, email: u.email || null, photoURL: u.photoURL || null }); } catch (e) { /* ignore */ }
+        try { saveUserProfile(u.uid, { displayName: u.displayName || null, email: u.email || null, photoURL: u.photoURL || null }); } catch (e) {  }
       }
     });
     return () => unsubscribe();
@@ -34,17 +33,14 @@ export function UserProvider({ children }) {
     if (!uid && !user) throw new Error('No user to update');
     const theUid = uid || user.uid;
     try {
-      // persist into Firestore
+
       await saveUserProfile(theUid, profile);
-      // also update Firebase Auth profile when available
       try {
         if (auth && auth.currentUser) {
           await fbUpdateProfile(auth.currentUser, { displayName: profile.displayName || auth.currentUser.displayName || null, photoURL: profile.photoURL || auth.currentUser.photoURL || null });
-          // refresh local user state
           setUser({ ...auth.currentUser });
         }
       } catch (e) {
-        // non-fatal
         console.warn('fb updateProfile failed', e?.message || e);
       }
       return true;
@@ -57,8 +53,7 @@ export function UserProvider({ children }) {
   async function saveLevel(uid, levelData) {
     if (!user && !uid) throw new Error('No authenticated user');
     const id = await saveLevelResult(uid || user.uid, levelData);
-    // NOTE: saveLevelResult already writes to the realtime leaderboard (if available),
-    // so we avoid duplicating writes here.
+    
     return id;
   }
 
@@ -71,7 +66,6 @@ export function UserProvider({ children }) {
   }
 
   async function leaderboard(limitNumber = 10) {
-    // prefer realtime leaderboard (more real-time) but fall back to Firestore
     try {
       const r = await getRealtimeLeaderboard(limitNumber);
       if (r && r.length) return r;

@@ -1,5 +1,3 @@
-// src/utils/sound.js
-
 export function playPopSound(success = true, volume = 0.18) {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();

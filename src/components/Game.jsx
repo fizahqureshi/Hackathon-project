@@ -1,276 +1,329 @@
-import React, { useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
-import { Box, Button, IconButton, LinearProgress } from "@mui/material";
-
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Box, Button, Typography, IconButton, Paper, Modal } from "@mui/material";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import PauseIcon from "@mui/icons-material/Pause";
-import VolumeUpIcon from "@mui/icons-material/VolumeUp";
-import VolumeOffIcon from "@mui/icons-material/VolumeOff";
+import StopIcon from "@mui/icons-material/Stop";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
-
+import SkipNextIcon from "@mui/icons-material/SkipNext";
+import FlagIcon from "@mui/icons-material/Flag";
+import { useDispatch, useSelector } from "react-redux";
+import { startLevel, popBalloon as popAction, missBalloon, endLevel, setLevel } from "../slices/gameSlice";
 import Balloon from "./Balloon";
-import Leaderboard from "./Leaderboard";
+import PerformanceSummary from "./PerformanceSummary";
+import { v4 as uuid } from "uuid";
+import { saveLevelResult, saveSession, serverTimestamp } from "../firebase/firebaseConfig";
+import "../styles/game.css";
 
-import {
-  auth,
-  saveLevelResult,
-  getTopLeaderboard,
-} from "../firebase/firebaseConfig";
 
-import { playPopSound } from "../utils/sound";
-import "../styles/styles.css";
+export default function Game() {
+  const dispatch = useDispatch();
+  const auth = useSelector((s) => s.auth);
+  const game = useSelector((s) => s.game);
+  const { level: reduxLevel = 1, isPlaying } = game;
 
-// Utility helpers
-const NEON_COLORS = ["#FF3366", "#33CCFF", "#FFCC33", "#9D33FF", "#33FF99", "#FF7AB6"];
-const rnd = (a, b) => Math.random() * (b - a) + a;
-const choose = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const [level, setLocalLevel] = useState(reduxLevel);
+  useEffect(() => setLocalLevel(reduxLevel), [reduxLevel]);
 
-export default function PopBalloonApp() {
-  // AUTH
-  const [userId, setUserId] = useState(null);
-  const [userEmail, setUserEmail] = useState(null);
-
-  useEffect(() => {
-    const unsub = auth.onAuthStateChanged((u) => {
-      if (u) {
-        setUserId(u.uid);
-        setUserEmail(u.email || null);
-      }
-    });
-    return () => unsub();
-  }, []);
-
-  // GAME STATES
-  const [playerName, setPlayerName] = useState("Player");
-  const [level, setLevel] = useState(1);
   const [balloons, setBalloons] = useState([]);
-  const [targetColor, setTargetColor] = useState("");
-  const [score, setScore] = useState(0);
-  const [chances, setChances] = useState(3);
-  const [timeLeft, setTimeLeft] = useState(null);
-  const [paused, setPaused] = useState(false);
-  const [soundOn, setSoundOn] = useState(true);
-  const [combo, setCombo] = useState(0);
-  const [maxCombo, setMaxCombo] = useState(0);
-  const [leaderboard, setLeaderboard] = useState([]);
+  const spawnTimer = useRef(null);
 
-  const levelStartRef = useRef(Date.now());
-  const finishing = useRef(false);
+  const THEME_PALETTE = useMemo(() => ["#FF2D95", "#FF7AB6", "#4DA6FF", "#6A4BFF", "#00E5A8"], []);
+  const levelActiveCounts = [5, 7, 9, 10, 12, 14, 15, 17, 18, 20];
+  const levelConfigs = useMemo(() => [
+    { spawnInterval: 950, speedRange: [6.6, 7.4], movement: "vertical", colorChanging: false, colorChangeSpeed: 1400 },
+    { spawnInterval: 820, speedRange: [6.0, 6.8], movement: "lr", colorChanging: false, colorChangeSpeed: 1200 },
+    { spawnInterval: 760, speedRange: [5.6, 6.2], movement: "ud", colorChanging: true, colorChangeSpeed: 1000 },
+    { spawnInterval: 700, speedRange: [5.2, 6.0], movement: "lr", colorChanging: true, colorChangeSpeed: 900 },
+    { spawnInterval: 640, speedRange: [4.6, 5.4], movement: "diagonal", colorChanging: true, colorChangeSpeed: 820 },
+    { spawnInterval: 580, speedRange: [4.0, 4.8], movement: "lr", colorChanging: true, colorChangeSpeed: 720 },
+    { spawnInterval: 520, speedRange: [3.6, 4.4], movement: "diagonal", colorChanging: true, colorChangeSpeed: 640 },
+    { spawnInterval: 470, speedRange: [3.0, 3.8], movement: "lr", colorChanging: true, colorChangeSpeed: 560 },
+    { spawnInterval: 420, speedRange: [2.6, 3.4], movement: "diagonal", colorChanging: true, colorChangeSpeed: 460 },
+    { spawnInterval: 380, speedRange: [2.2, 3.0], movement: "diagonal", colorChanging: true, colorChangeSpeed: 360 },
+  ], []);
 
-  const LEVELS = 10;
+  const cfg = levelConfigs[Math.max(0, Math.min(9, level - 1))];
+  const maxOnScreen = levelActiveCounts[Math.max(0, Math.min(9, level - 1))];
 
-  // ---- Balloon Generator ----
-  function generateBalloons(count, levelNum) {
-    return new Array(count).fill(0).map((_, i) => {
-      const isPower = Math.random() < 0.1;
+  const [targetColor, setTargetColor] = useState(THEME_PALETTE[(level - 1) % THEME_PALETTE.length]);
+  useEffect(() => { pickNewTarget(); }, [level]);
 
-      return {
-        id: `${Date.now()}_${i}`,
-        color: isPower ? "#FFD700" : choose(NEON_COLORS),
-        x: rnd(8, 92),
-        y: rnd(10, 86),
-        size: rnd(40, 110),
-        power: isPower ? "gold" : null,
-        speedSeed: rnd(0.7, 1.6),
-      };
-    });
-  }
+  const pickNewTarget = useCallback((avoid = null) => {
+    const others = THEME_PALETTE.filter((c) => c !== (avoid ?? targetColor));
+    if (others.length === 0) return;
+    const pick = others[Math.floor(Math.random() * others.length)];
+    setTargetColor(pick);
+  }, [THEME_PALETTE, targetColor]);
 
-  // ---- Level Setup ----
-  useEffect(() => {
-    setScore(0);
-    setCombo(0);
-    setChances(3);
-    setBalloons(generateBalloons(6 + Math.floor(level / 2), level));
-    levelStartRef.current = Date.now();
-    setTimeLeft(Math.max(12, 30 - (level - 1) * 2));
-  }, [level]);
-
-  // Read player name from local storage if available
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('popmaster_playerName');
-      if (stored && stored.trim()) setPlayerName(stored.trim());
-    } catch (e) {
-      // ignore
-    }
-  }, []);
-
-  // Load top leaderboard on mount
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const lb = await getTopLeaderboard();
-        if (mounted) setLeaderboard(lb || []);
-      } catch (e) {
-        // ignore
-      }
-    })();
-    return () => (mounted = false);
-  }, []);
-
-  // ---- Target Color ----
-  useEffect(() => {
-    if (!balloons.length) return;
-    setTargetColor(choose(balloons.map((b) => b.color)));
-  }, [balloons]);
-
-  // ---- Timer ----
-  useEffect(() => {
-    if (paused || timeLeft == null) return;
-    if (timeLeft <= 0) {
-      setChances(0);
-      return;
-    }
-
-    const t = setInterval(() => setTimeLeft((t) => Math.max(0, t - 1)), 1000);
-    return () => clearInterval(t);
-  }, [paused, timeLeft]);
-
-  // ---- Pop Handler ----
-  function handlePop(b) {
-    if (paused) return;
-
-    if (b.color === targetColor || b.power === "gold") {
-      soundOn && playPopSound(true);
-      setScore((s) => s + (b.power === "gold" ? 4 : 1));
-      setCombo((c) => c + 1);
-      setMaxCombo((m) => Math.max(m, combo + 1));
-      setBalloons((bs) => bs.filter((x) => x.id !== b.id));
-    } else {
-      soundOn && playPopSound(false);
-      setChances((c) => c - 1);
-      setCombo(0);
-    }
-  }
-
-  // ---- End Level ----
-  useEffect(() => {
-    if (chances <= 0) finishLevel();
-  }, [chances]);
-
-  async function finishLevel() {
-    if (finishing.current) return;
-    finishing.current = true;
-
-    if (!userId) {
-      console.warn("User not logged in → score not saved.");
-    } else {
-      const payload = {
-        level,
-        score,
-        combo: maxCombo,
-        playerName,
-        playerEmail: userEmail,
-      };
-
-        // Save to Firestore
-        await saveLevelResult(userId, payload);
-
-        // Update leaderboard
-        const lb = await getTopLeaderboard();
-        setLeaderboard(lb);
-    }
-
-    // Next level
-    if (level < LEVELS) setLevel((l) => l + 1);
-    else setLevel(1);
-
-    finishing.current = false;
-  }
-
-  // ---- Motion ----
-  function randomPath(seed) {
-    return {
-      x: [0, rnd(-20, 20) * seed, rnd(-12, 12), 0],
-      y: [0, rnd(-20, 20), rnd(-10, 10), 0],
-      rotate: [0, rnd(-10, 10), rnd(-6, 6), 0],
+  const spawnBalloon = useCallback(() => {
+    if (balloons.length >= maxOnScreen) return;
+    const id = uuid();
+    const left = Math.max(3, Math.min(92, Math.random() * 92));
+    const size = 90 + Math.random() * 36; 
+    const duration = +(cfg.speedRange[0] + Math.random() * (cfg.speedRange[1] - cfg.speedRange[0])).toFixed(2);
+    const initialColor = THEME_PALETTE[Math.floor(Math.random() * THEME_PALETTE.length)];
+    const balloon = {
+      id,
+      left: Math.round(left * 100) / 100,
+      size: Math.round(size),
+      duration,
+      color: initialColor,
+      movement: cfg.movement,
+      colorChanging: cfg.colorChanging,
+      colorChangeSpeed: cfg.colorChangeSpeed,
+      spawnedAt: Date.now(),
     };
-  }
+    setBalloons((p) => [...p, balloon]);
+    setTimeout(() => {
+      setBalloons((prev) => prev.filter((b) => b.id !== id));
+    }, (duration + 1.6) * 1000);
 
-  const motionFor = (b) => ({
-    animate: randomPath(b.speedSeed),
-    transition: {
-      duration: 3,
-      repeat: Infinity,
-      repeatType: "mirror",
-    },
-  });
+  }, [cfg, THEME_PALETTE, balloons.length, maxOnScreen]);
+
+  const startSpawning = useCallback(() => {
+    stopSpawning();
+    spawnBalloon();
+    spawnTimer.current = setInterval(spawnBalloon, cfg.spawnInterval);
+  }, [cfg.spawnInterval, spawnBalloon]);
+
+  const stopSpawning = useCallback(() => {
+    if (spawnTimer.current) {
+      clearInterval(spawnTimer.current);
+      spawnTimer.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isPlaying) startSpawning(); else stopSpawning();
+    return () => stopSpawning();
+  
+  }, [isPlaying, level]);
+
+  const targetNeeded = useMemo(() => 5 + (level - 1) * 2, [level]);
+
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [savedSession, setSavedSession] = useState(null);
+  const [prevSession, setPrevSession] = useState(null);
+
+  const handlePop = useCallback((balloon, isTarget, spawnedAt) => {
+    const reaction = Date.now() - (spawnedAt || balloon.spawnedAt || Date.now());
+    dispatch(popAction({ points: isTarget ? 20 : 5, isTarget, reactionTime: reaction }));
+    setBalloons((prev) => prev.filter((b) => b.id !== balloon.id));
+
+    if (isTarget) {
+      pickNewTarget(balloon.color);
+    } else {
+      if (Math.random() < 0.12) pickNewTarget();
+    }
+  }, [dispatch, pickNewTarget]);
+
+  const handleMiss = useCallback((balloonId) => {
+    setBalloons((prev) => prev.filter((b) => b.id !== balloonId));
+    dispatch(missBalloon());
+    pickNewTarget();
+  }, [dispatch, pickNewTarget]);
+
+  useEffect(() => {
+    if (!isPlaying) return;
+    if ((game.balloonsCorrect || 0) >= targetNeeded) {
+      (async () => {
+        dispatch(endLevel());
+        stopSpawning();
+        await saveAndShowSummary();
+        if (level < 10) {
+          setTimeout(() => {
+            const next = level + 1;
+            dispatch(setLevel(next));
+            dispatch(startLevel({ level: next, sessionId: uuid() }));
+          }, 900);
+        }
+      })();
+    }
+  
+  }, [game.balloonsCorrect, isPlaying, level]);
+
+  const handleStart = useCallback(() => {
+    setBalloons([]);
+    dispatch(startLevel({ level, sessionId: uuid() }));
+  }, [dispatch, level]);
+
+
+  const saveToFirebase = useCallback(async () => {
+    if (!auth?.user) return null;
+    const uid = auth.user.uid;
+    const sessionData = {
+      uid,
+      level,
+      score: game.score || 0,
+      balloonsPopped: game.balloonsPopped || 0,
+      balloonsCorrect: game.balloonsCorrect || 0,
+      avgReaction: game.reactionTimes && game.reactionTimes.length ? Math.round(game.reactionTimes.reduce((a, b) => a + b, 0) / game.reactionTimes.length) : null,
+      missed: (3 - (game.lives || 3)) || 0,
+      createdAt: serverTimestamp(),
+      playerName: auth.user.displayName || auth.user.email || "Guest",
+      playerEmail: auth.user.email || null,
+    };
+
+    try {
+      await saveLevelResult(uid, {
+        level: sessionData.level,
+        score: sessionData.score,
+        attempts: 1,
+        reactionTimes: game.reactionTimes || [],
+        areas: null,
+        playerName: sessionData.playerName,
+        playerEmail: sessionData.playerEmail,
+      });
+    } catch (err) {
+      console.warn("saveLevelResult failed:", err);
+    }
+
+    try {
+      await saveSession(sessionData);
+    } catch (err) {
+      console.warn("saveSession failed:", err);
+    }
+
+    return sessionData;
+  }, [auth, game, level]);
+
+  const fetchPrevSession = useCallback(async (uid) => {
+    try {
+      return null; 
+    } catch (err) {
+      return null;
+    }
+  }, []);
+
+  const saveAndShowSummary = useCallback(async () => {
+    const saved = await saveToFirebase();
+    setSavedSession(saved);
+    if (auth?.user?.uid) {
+      const prev = await fetchPrevSession(auth.user.uid);
+      setPrevSession(prev);
+    } else {
+      setPrevSession(null);
+    }
+    setSummaryOpen(true);
+  }, [saveToFirebase, fetchPrevSession, auth]);
+
+  const handleRetryLevel = useCallback(() => {
+    setSummaryOpen(false);
+    setBalloons([]);
+    dispatch(startLevel({ level, sessionId: uuid() }));
+  }, [dispatch, level]);
+
+  const handleNextLevel = useCallback(() => {
+    setSummaryOpen(false);
+    const next = Math.min(10, level + 1);
+    dispatch(setLevel(next));
+    dispatch(startLevel({ level: next, sessionId: uuid() }));
+  }, [dispatch, level]);
+
+  const handleFinishSave = useCallback(async () => {
+    dispatch(endLevel());
+    stopSpawning();
+    await saveAndShowSummary();
+  }, [dispatch, saveAndShowSummary, stopSpawning]);
+
+  const prevLevel = useCallback(() => {
+    const next = Math.max(1, level - 1);
+    setLocalLevel(next);
+    dispatch(setLevel(next));
+  }, [dispatch, level]);
+
+  const nextLevel = useCallback(() => {
+    const next = Math.min(10, level + 1);
+    setLocalLevel(next);
+    dispatch(setLevel(next));
+  }, [dispatch, level]);
 
   return (
-    <div id="pop-root" className="app-root">
-      {/* HEADER */}
-      <header className="app-header container-fluid py-3">
-        <div className="d-flex align-items-center justify-content-between">
-          <div>
-            <h3 className="logo">PopMaster</h3>
-            <div className="meta small text-muted">
-              Player: <strong>{playerName}</strong> • Level {level}/{LEVELS}
+    <>
+      <Box className="neon-game-root">
+        <Paper elevation={6} className="hud-top">
+          <Box className="hud-left">
+            <img src="/popmaster-small.png" alt="Pop Master" className="logo-small" />
+            <Typography variant="h6" className="hud-title">Pop Master</Typography>
+          </Box>
+
+          <Box className="hud-center">
+            <Typography className="hud-info">Level <strong>{level}</strong></Typography>
+            <Typography className="hud-info">Score <strong>{game.score || 0}</strong></Typography>
+            <Typography className="hud-info">Lives <strong>{game.lives || 0}</strong></Typography>
+          </Box>
+
+          <Box className="hud-right">
+            <div className="target-box">
+              <Typography sx={{ fontSize: 12, color: "#E7F7FF" }}>Target</Typography>
+              <div className="target-swatch" style={{ background: targetColor }} />
             </div>
+            <Box sx={{ ml: 2 }}>
+              {!isPlaying ? (
+                <Button variant="contained" onClick={() => { setBalloons([]); dispatch(startLevel({ level, sessionId: uuid() })); }} startIcon={<PlayArrowIcon />}>Play</Button>
+              ) : (
+                <Button variant="outlined" onClick={() => dispatch(endLevel())} startIcon={<StopIcon />}>Stop</Button>
+              )}
+            </Box>
+          </Box>
+        </Paper>
+
+        <Box className="arena-wrap">
+          <div className="arena-bg" />
+          <div className="arena" role="region" aria-label="game arena">
+            {balloons.map((b) => (
+              <Balloon
+                key={b.id}
+                id={b.id}
+                left={b.left}
+                size={b.size}
+                duration={b.duration}
+                color={b.color}
+                movement={b.movement}
+                colorChanging={b.colorChanging}
+                colorChangeSpeed={b.colorChangeSpeed}
+                palette={THEME_PALETTE}
+                targetColor={targetColor}
+                spawnedAt={b.spawnedAt}
+                onPop={(isTarget, spawnedAt, id) => handlePop(b, isTarget, spawnedAt)}
+                onMiss={(id) => handleMiss(b.id)}
+              />
+            ))}
           </div>
+        </Box>
 
-          <div className="d-flex gap-2">
-            <div className="status-chip">Target: <span style={{ color: targetColor }}>{targetColor}</span></div>
-            <div className="status-chip">Score: {score}</div>
-            <div className="status-chip">Combo: x{combo}</div>
-            <div className="status-chip">Lives: {chances}</div>
-            <div className="status-chip">Time: {timeLeft}s</div>
+        <Paper elevation={6} className="hud-bottom">
+          <Box className="controls-left">
+            <Button startIcon={<RestartAltIcon />} variant="outlined" onClick={() => { dispatch(endLevel()); setBalloons([]); dispatch(startLevel({ level, sessionId: uuid() })); }}>
+              Retry
+            </Button>
+            <Button variant="outlined" sx={{ ml: 1 }} onClick={prevLevel}>Prev</Button>
+            <Button variant="outlined" sx={{ ml: 1 }} onClick={nextLevel}>Next</Button>
+          </Box>
 
-            <IconButton onClick={() => setPaused((p) => !p)}>
-              {paused ? <PlayArrowIcon /> : <PauseIcon />}
-            </IconButton>
+          <Box className="controls-right">
+            <Typography sx={{ color: "#DDEFF6", mr: 2, fontSize: 13 }}>Player: <strong>{auth?.user?.displayName || auth?.user?.email || "Guest"}</strong></Typography>
+            <Button variant="contained" color="secondary" onClick={handleFinishSave} startIcon={<FlagIcon />}>Finish & Save</Button>
+          </Box>
+        </Paper>
+      </Box>
 
-            <IconButton onClick={() => setSoundOn((s) => !s)}>
-              {soundOn ? <VolumeUpIcon /> : <VolumeOffIcon />}
-            </IconButton>
-
-            <IconButton onClick={() => setLevel(level)}>
-              <RestartAltIcon />
-            </IconButton>
-          </div>
-        </div>
-      </header>
-
-      {/* GAME AREA */}
-      <main className="container stage-wrap">
-        <div className="stage">
-          {balloons.map((b) => (
-            <motion.div
-              key={b.id}
-              className="balloon-wrap"
-              style={{ left: `${b.x}%`, top: `${b.y}%` }}
-              {...motionFor(b)}
-            >
-              <Balloon {...b} onPop={() => handlePop(b)} />
-            </motion.div>
-          ))}
-        </div>
-
-        {/* PROGRESS + NEXT */}
-        <div className="d-flex justify-content-between mt-3">
-          <LinearProgress
-            variant="determinate"
-            value={(level / LEVELS) * 100}
-            sx={{ height: 8, borderRadius: 6, flex: 1 }}
-          />
-
-          <Button
-            variant="contained"
-            className="ms-2"
-            onClick={() => setLevel((l) => (l < LEVELS ? l + 1 : 1))}
-          >
-            Next
-          </Button>
-        </div>
-
-        {/* LEADERBOARD */}
-        <Leaderboard leaderboard={leaderboard} playerName={playerName} />
-      </main>
-
-      <footer className="app-footer small text-center py-3">
-        Built with ❤️ • Responsive • MUI + Framer Motion
-      </footer>
-    </div>
+      <Modal open={summaryOpen} onClose={() => setSummaryOpen(false)}>
+        <Box sx={{ position: "fixed", top: "10%", left: "50%", transform: "translateX(-50%)", width: "min(96%, 760px)", outline: "none" }}>
+          {savedSession ? (
+            <PerformanceSummary
+              session={savedSession}
+              prevSession={prevSession}
+              onRetryLevel={handleRetryLevel}
+              onNextLevel={handleNextLevel}
+              onClose={() => setSummaryOpen(false)}
+            />
+          ) : (
+            <Paper sx={{ p: 3 }}>
+              <Typography>Saving...</Typography>
+            </Paper>
+          )}
+        </Box>
+      </Modal>
+    </>
   );
 }

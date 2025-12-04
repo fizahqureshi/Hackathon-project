@@ -32,7 +32,6 @@ export default function Navbar() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-  // load last level progress for small progress indicator
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -42,7 +41,7 @@ export default function Navbar() {
           if (mounted) setLastLevel(last);
         }
       } catch (e) {
-        // ignore
+    
       }
     })();
     return () => (mounted = false);

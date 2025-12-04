@@ -12,27 +12,15 @@ import LevelSummary from './components/LevelSummary';
 import Leaderboard from './components/Leaderboard';
 import Settings from './components/Settings';
 
-// Home component is imported from src/components/Home.jsx
-
 export default function App(){
-
-	// Runtime sanity checks for imported components to help diagnose
-	// "Element type is invalid" issues (often caused by default/named
-	// import mismatches where an object namespace is imported instead
-	// of the component function).
 	const makeChecker = (name, comp) => {
 		const t = typeof comp;
-		// Accept function or string (for intrinsic elements) or object with $$typeof (React element)
 		const ok = t === 'function' || t === 'string' || (comp && typeof comp === 'object' && ('$$typeof' in comp));
 		if (!ok) {
-			// Print a clear message to console so the developer can see which import is wrong
-			// eslint-disable-next-line no-console
 			console.error(`Invalid component import: ${name} — typeof=${t}`, comp);
 		}
 		return ok;
 	};
-
-	// check commonly used components
 	makeChecker('Home', Home);
 	makeChecker('Signup', Signup);
 	makeChecker('Login', Login);

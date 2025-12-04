@@ -49,7 +49,6 @@ const Chatbot = () => {
   const getAIResponse = (text) => {
     const message = text.toLowerCase();
 
-    // Game-specific rule-based responses
     if (message.includes('how') && message.includes('play')) {
       return 'Pop the target-coloured balloons only. You have 3 chances per level. React fast to score more points!';
     }
@@ -81,8 +80,6 @@ const Chatbot = () => {
     if (message.includes('help') || message.includes('issue') || message.includes('bug')) {
       return 'If you encounter a bug, take a screenshot and report it from the Settings > Feedback screen. Include device and steps to reproduce.';
     }
-
-    // Short friendly default
     return "Nice question — try asking about 'how to play', 'score', 'power-ups' or 'leaderboard'.";
   };
 
@@ -101,7 +98,6 @@ const Chatbot = () => {
     setInput('');
     setLoading(true);
 
-    // Simulate thinking / no external API
     setTimeout(() => {
       const botText = getAIResponse(text);
       const botMsg = {
